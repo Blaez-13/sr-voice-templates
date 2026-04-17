@@ -27,6 +27,7 @@ The `deploy/stamp.py` script assembles these three inputs and produces a live El
 ```
 sr-voice-templates/
   README.md                   — This file
+  requirements.txt            — Python dependencies for deploy scripts (PyYAML)
   .gitignore
   fragments/                  — 10 reusable prompt components
     00-datetime-anchor.md     — Current datetime injection + relative date resolution
@@ -47,7 +48,7 @@ sr-voice-templates/
       workflow.yaml           — Node graph, LLM config, fragment order, test config
       prompts/                — 5 node-specific prompt files
       kb/                     — 7 knowledge base files with {{placeholders}}
-      tests/simulation/       — 10 YAML test scenarios
+      tests/simulation/       — 10 YAML test scenarios (01 is fully populated reference)
       intake-form.json        — JSON Schema of all onboarding fields
       README.md               — Deployment guide for plumber vertical
     dental/v1/README.md       — Stub (HIPAA blocker — see notes)
@@ -61,6 +62,204 @@ sr-voice-templates/
     README.md                 — Script usage documentation
 ```
 
+## Environment Variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `ELEVENLABS_API_KEY` | Yes (smoke.py, stamp.py) | ElevenLabs API key from elevenlabs.io |
+| `VOICE_BOT_URL` | No | Voice-bot service base URL. Default: `http://localhost:8080` |
+
+Set these in your shell or a `.env` file (not committed — `.env` is in `.gitignore`).
+
+```bash
+export ELEVENLABS_API_KEY=your_key_here
+export VOICE_BOT_URL=https://sr-voice-bot-925407339242.us-central1.run.app
+```
+
+## Running stamp.py (Deploy a Client Agent)
+
+`stamp.py` takes a template name, a completed intake JSON, and a client slug. It composes
+the system prompt from all template nodes (concatenated under `## Section` headers), renders
+the knowledge base, calls the voice-bot's `sync-from-template` endpoint to push to
+ElevenLabs, and then runs the smoke test suite.
+
+```bash
+# Install Python dependencies first
+pip install -r requirements.txt
+
+# Deploy a new client (will also run smoke tests after deploy)
+python deploy/stamp.py \
+  --template plumber/v1 \
+  --intake /path/to/bama-plumbing-intake.json \
+  --client-slug bama-plumbing
+
+# Dry run — render and preview everything without calling any API
+python deploy/stamp.py \
+  --template plumber/v1 \
+  --intake /path/to/bama-plumbing-intake.json \
+  --client-slug bama-plumbing \
+  --dry-run
+
+# Deploy without smoke tests (use when iterating on prompts)
+python deploy/stamp.py \
+  --template plumber/v1 \
+  --intake /path/to/intake.json \
+  --client-slug bama-plumbing \
+  --skip-smoke
+
+# Override voice-bot URL (e.g. staging environment)
+python deploy/stamp.py \
+  --template plumber/v1 \
+  --intake intake.json \
+  --client-slug bama-plumbing \
+  --voice-bot-url https://staging-vox.run.app
+```
+
+### Prompt Architecture: ONE-AGENT-PER-CLIENT
+
+For MVP, `stamp.py` concatenates all per-node prompts (triage, emergency, booking, support,
+billing) into a SINGLE ElevenLabs system prompt using `## Section` headers:
+
+```
+## Triage
+
+<triage node prompt content>
+
+---
+
+## Emergency
+
+<emergency node prompt content>
+
+---
+
+...
+```
+
+The triage node always comes first. Multi-agent Workflow decomposition (independent ElevenLabs
+agents per node with Workflow routing) is a v2 concern flagged for Phase 4.
+
+## Running smoke.py (Test Suite)
+
+`smoke.py` runs the 10 simulation scenarios in `tests/simulation/` against a deployed
+ElevenLabs agent and writes a JSON report. Exit code 0 = pass threshold met, 1 = fail.
+
+```bash
+# Run full suite against an agent (min 9/10 required to pass)
+python deploy/smoke.py \
+  --agent-id el_agent_abc123 \
+  --template plumber/v1
+
+# Run a single scenario by ID substring
+python deploy/smoke.py \
+  --agent-id el_agent_abc123 \
+  --template plumber/v1 \
+  --scenario 01-flooding-emergency
+
+# Lower the pass threshold for development
+python deploy/smoke.py \
+  --agent-id el_agent_abc123 \
+  --template plumber/v1 \
+  --min-pass 5
+
+# Write report to a specific directory
+python deploy/smoke.py \
+  --agent-id el_agent_abc123 \
+  --template plumber/v1 \
+  --report-dir /tmp/smoke-reports
+```
+
+The JSON report is written to `./reports/smoke-<timestamp>.json` and contains:
+
+```json
+{
+  "summary": { "passed": 9, "failed": 0, "skipped_api_pending": 1, "pending": 0, "total": 10 },
+  "api_integration_complete": false,
+  "tests": [
+    {
+      "scenario_id": "01-flooding-emergency",
+      "status": "passed",
+      "passed": true,
+      "failures": []
+    }
+  ]
+}
+```
+
+### ElevenLabs Test API Status
+
+The ElevenLabs simulation endpoint (`POST /v1/convai/agents/{agent_id}/simulate`) is not yet
+confirmed as publicly available. `smoke.py` has the full assertion logic wired — when the
+endpoint is confirmed, set `API_INTEGRATION_COMPLETE = True` in `deploy/smoke.py` and verify
+the payload shape matches the TODO comment at line ~80.
+
+Until then, scenarios with `pass_criteria` defined are parsed and assertions are validated
+for structural correctness, but API calls are stubbed. Scenarios are marked
+`skipped_api_pending` rather than pass/fail, and the runner exits 0 to avoid blocking CI.
+
+## Admin UI Test Trigger
+
+The voice-bot admin dashboard has a "Run Test Suite" button on the Vox tab for any client
+with a provisioned ElevenLabs agent. Click it to:
+
+1. Open a modal showing live streaming output from smoke.py
+2. See each scenario result in real time
+3. See the final PASS/FAIL badge and report path when complete
+
+The button calls `POST /api/clients/:slug/run-tests` on the voice-bot service, which shells
+out to `smoke.py` and streams NDJSON output back to the browser.
+
+The voice-bot service locates `smoke.py` at:
+```
+<voice-bot-root>/../sr-voice-templates/deploy/smoke.py
+```
+
+Both repos must be siblings in the same parent directory (e.g. `Anti-Gravity/`) for this
+path to resolve. If they are elsewhere, set the path in `routes/admin/test-runner.js`.
+
+## How to Add a New Scenario YAML
+
+Use `templates/plumber/v1/tests/simulation/01-flooding-emergency.yaml` as the reference
+implementation. It is the canonical example of a fully populated scenario.
+
+**Key fields required for an executable scenario:**
+
+```yaml
+scenario_id: XX-short-name       # must match the filename prefix
+status: ready                    # set to "pending" to skip gracefully
+description: >
+  One paragraph describing what this test verifies and why it matters.
+
+pass_criteria:
+  triage_label: emergency        # or new_booking, billing, service_complaint, etc.
+  tool_invoked: classify_service_call
+  transfer_fired: true
+  max_agent_turns_before_transfer: 2
+  must_not_say:
+    - "Let me check availability"
+
+tool_mock:
+  classify_service_call:
+    classification: emergency
+    urgency_score: 10
+
+turns:
+  - speaker: caller
+    text: "The exact words the caller says"
+  - speaker: agent
+    expected_behavior:
+      - What the agent should do (narrative — for human review, not assertion)
+```
+
+**Rules:**
+- A scenario with `pass_criteria: null` or no `pass_criteria` key is automatically marked
+  `pending` by the runner and skipped gracefully (no test failure).
+- `status: pending` also forces a skip.
+- `tool_mock` overrides what the tool returns for this specific scenario — critical for
+  testing edge cases like empty slots or tool failures.
+- `expected_behavior` is human-readable documentation, not a machine assertion.
+  All machine assertions belong in `pass_criteria`.
+
 ## The Compose + Stamp Onboarding Flow
 
 ```
@@ -73,14 +272,15 @@ sr-voice-templates/
                            ▼
   ┌─────────────┐    ┌─────────────────────────────────────┐
   │  Fragments  │───▶│           stamp.py                  │
-  │  fragments/ │    │  1. Render {{placeholders}}          │
-  └─────────────┘    │  2. Assemble system prompt           │
-                     │  3. Upload KB to ElevenLabs          │
-  ┌─────────────┐    │  4. Render + upload tool schemas     │
-  │ Intake Form │───▶│  5. Create/update EL agent           │
-  │ (per-client │    │  6. Run smoke.py (pass gate)         │
-  │  JSON)      │    └──────────────┬──────────────────────┘
-  └─────────────┘                   │
+  │  fragments/ │    │  1. Validate intake required fields  │
+  └─────────────┘    │  2. Render {{placeholders}}          │
+                     │  3. Assemble system prompt (all nodes│
+  ┌─────────────┐    │     under ## Section headers)        │
+  │ Intake Form │───▶│  4. Render KB docs                   │
+  │ (per-client │    │  5. POST to voice-bot sync-from-tmpl │
+  │  JSON)      │    │  6. Run smoke.py (go-live gate)       │
+  └─────────────┘    └──────────────┬──────────────────────┘
+                                    │
                                     ▼
                         ┌───────────────────────┐
                         │  ElevenLabs Agent     │
@@ -100,7 +300,7 @@ sr-voice-templates/
 3. Write vertical-specific prompts (triage, emergency, booking, support, billing)
 4. Write KB files with `{{placeholder}}` markers for client-specific content
 5. Adapt the emergency criteria in `kb/04-emergency-criteria.md` for the vertical
-6. Write 10 simulation scenarios in `tests/simulation/` following the YAML schema from plumber/v1
+6. Write 10 simulation scenarios in `tests/simulation/` following the YAML schema above
 7. Fill out `intake-form.json` JSON Schema with all fields the vertical needs
 8. Test with `stamp.py --dry-run` before provisioning a real agent
 9. Update this README
@@ -119,29 +319,33 @@ Each file in `tests/simulation/` follows this schema:
 
 ```yaml
 scenario_id: string         # matches filename prefix (e.g. 01-flooding-emergency)
+status: ready|pending       # pending = skip gracefully; ready = execute
 description: string         # human-readable description of what this tests
 pass_criteria:              # assertions evaluated against agent response
   triage_label: string      # expected classify_service_call classification
   urgency_score_min: int    # minimum urgency_score in tool payload
   tool_invoked: string      # name of tool that must be called
+  tool_invoked_2: string    # second required tool call
   transfer_fired: bool      # whether transfer_to_number must be called
+  booking_confirmed: bool   # whether book_appointment returned confirmed=true
   max_agent_turns_before_transfer: int
+  max_turns_to_booking: int
+  required_fields_collected: [string]  # must appear in tool call args
   must_not_say: [string]    # phrases that, if spoken, cause the test to fail
   must_say_one_of: [string] # at least one phrase from this list must appear
 tool_mock:                  # optional: override tool responses for this scenario
-  check_availability:
-    response: {...}
-  book_appointment:
-    first_call_response: {...}
-    second_call_response: {...}
+  classify_service_call:
+    classification: emergency
+    urgency_score: 10
 turns:                      # the simulated conversation
   - speaker: caller|agent
-    text: string            # caller's exact words
-    expected_behavior: string|list  # narrative description of what agent should do
+    text: string            # caller's exact words (caller turns only)
+    expected_behavior: string|list  # narrative description (agent turns)
 ```
 
-All `expected_behavior` entries are narrative — smoke.py evaluates `pass_criteria` programmatically
-and uses `expected_behavior` as documentation for the human reviewer when a test fails.
+All `expected_behavior` entries are narrative — smoke.py evaluates `pass_criteria`
+programmatically and uses `expected_behavior` as documentation for human reviewers
+when a test fails.
 
 ## Placeholder Conventions
 
@@ -151,7 +355,7 @@ and uses `expected_behavior` as documentation for the human reviewer when a test
 - `{{business_timezone}}` — IANA timezone string
 - `{{emergency_phone}}` — on-call emergency number
 - `{{escalation_phone}}` — general transfer number
-- `{{service_area}}` — plain-English service area description
+- `{{service_area_primary}}` — plain-English service area description
 - `{{client_slug}}` — URL-safe business identifier
 - `{{webhook_base_url}}` — base URL of SR voice-bot service
 

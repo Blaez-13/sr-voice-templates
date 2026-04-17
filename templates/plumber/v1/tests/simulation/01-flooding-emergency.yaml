@@ -1,38 +1,101 @@
 ---
 # Test Scenario 01: Clear Emergency — Flooding
-# Expected: transfer fires within 2 agent turns, urgency_score >= 9
+# STATUS: REFERENCE IMPLEMENTATION — fully populated with executable details.
+# This scenario is the canonical example for how to write a smoke test.
+# See README.md ("How to add a new scenario YAML") for authoring guidance.
+#
 # Maps to D5.1: "Clear emergency → transfers in <10s"
+# Expected outcome: transfer fires within 2 agent turns, urgency_score >= 9
 
 scenario_id: 01-flooding-emergency
-description: Caller reports active flooding in their home. Agent must classify as emergency and transfer immediately without asking qualifying questions.
+status: ready
+description: >
+  Caller reports active flooding in their home. Agent must classify as emergency
+  and transfer immediately without asking qualifying questions or offering
+  appointment booking. This tests the highest-priority rule: emergency keyword
+  detection triggers immediate transfer_to_number with no qualifying delay.
+
+# ── Pass Criteria ──────────────────────────────────────────────────────────────
+# The runner evaluates these assertions against the API response.
+# All criteria must pass for the scenario to be marked PASS.
 pass_criteria:
+  # ElevenLabs simulation API should populate triage_label from classify_service_call
   triage_label: emergency
+
+  # urgency_score from classify_service_call tool call args must be >= 9
   urgency_score_min: 9
+
+  # classify_service_call must be invoked (before transfer)
   tool_invoked: classify_service_call
+
+  # transfer_to_number must fire — the go/no-go test
   transfer_fired: true
+
+  # Agent must not waste turns asking qualifying questions before transferring.
+  # Transfer must happen by end of turn 2 (0-indexed: turns 0 and 1).
   max_agent_turns_before_transfer: 2
+
+  # Agent must NOT say any of these — they indicate booking logic ran incorrectly
   must_not_say:
     - "Let me check availability"
     - "book an appointment"
     - "What's a good time"
+    - "schedule a technician"
+    - "available slots"
+    - "Would Thursday work"
 
+# ── Tool Mocks ─────────────────────────────────────────────────────────────────
+# Override tool responses for this scenario.
+# classify_service_call returns emergency with urgency_score 10.
+tool_mock:
+  classify_service_call:
+    classification: emergency
+    urgency_score: 10
+    reason: "Active water flooding reported — immediate emergency"
+  transfer_to_number:
+    status: transferred
+    destination: "{{emergency_phone}}"
+
+# ── Conversation Turns ────────────────────────────────────────────────────────
+# Caller turns provide the text input to the simulation.
+# Agent turns describe the expected behavior — evaluated via pass_criteria,
+# not by literal text matching.
 turns:
   - speaker: caller
     text: "Hello, I need help right now. My basement is flooding — there's water coming in everywhere."
+    # Trigger: "flooding" and "help right now" are emergency keywords.
+    # The agent's emergency override fragment puts these at the top of the system prompt.
 
   - speaker: agent
     expected_behavior:
-      - Recognizes flooding keyword as emergency trigger
-      - Does NOT ask qualifying questions
+      - Immediately recognizes "flooding" as an emergency keyword per 08-emergency-override.md
+      - Does NOT ask any qualifying questions
+      - Does NOT offer to check calendar availability
       - Invokes classify_service_call with classification=emergency, urgency_score>=9
-      - Immediately says it is transferring
-      - Fires transfer_to_number
+      - Says something like "This sounds like an emergency — I'm connecting you now"
+      - Initiates transfer_to_number to emergency_phone
 
   - speaker: caller
     text: "Please hurry, the water is rising fast."
+    # Second turn — provides urgency confirmation. Transfer should already be firing.
 
   - speaker: agent
     expected_behavior:
-      - Transfer should already be in progress
-      - If still connected, confirms transfer is happening
-      - Does NOT offer to schedule an appointment
+      - Transfer is already in progress (this turn may not occur)
+      - If still connected, confirms transfer is happening ("Connecting you now")
+      - Does NOT pivot to offering a booking or asking questions
+      - Does NOT say "I understand your concern" followed by booking language
+
+# ── Rationale ─────────────────────────────────────────────────────────────────
+# This scenario tests the most critical safety property of the agent:
+# emergency callers must not be held in a booking flow while water is actively
+# flooding their home. A failure here is a P0 production incident.
+#
+# The 2-turn limit is strict by design. If classify_service_call is invoked and
+# transfer fires on turn 1, the test passes. Turn 2 is the outer limit.
+#
+# Failure modes this test catches:
+#   - classify_service_call not invoked (agent skipped triage tool)
+#   - urgency_score too low (classification logic regressed)
+#   - transfer_to_number not fired (agent offered booking instead)
+#   - Agent asked "is it a real emergency?" before transferring (too many turns)
