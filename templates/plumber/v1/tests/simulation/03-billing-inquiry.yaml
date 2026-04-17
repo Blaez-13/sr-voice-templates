@@ -1,0 +1,48 @@
+---
+# Test Scenario 03: Billing Inquiry — Tool Call Succeeds
+# Expected: agent verifies identity, answers what it can, transfers for account details
+# Maps to D5.3: "Billing lookup → tool call succeeds"
+
+scenario_id: 03-billing-inquiry
+description: Caller has a question about a charge on their invoice. Agent handles verification, answers general policy, routes to billing for specifics.
+pass_criteria:
+  triage_label: billing
+  pii_verification_performed: true
+  does_not_quote_prices: true
+  transfer_or_service_request_created: true
+  must_not_say:
+    - "I don't know"
+  must_say_one_of:
+    - "service call fee"
+    - "dispatch fee"
+    - "connect you with"
+    - "billing team"
+
+turns:
+  - speaker: caller
+    text: "Hi, I got an invoice from you guys and there's a $95 charge I don't understand. Can you explain what that is?"
+
+  - speaker: agent
+    expected_behavior:
+      - Classifies as billing inquiry
+      - Does NOT immediately give account details
+      - Asks for name and last 4 digits of phone for verification
+
+  - speaker: caller
+    text: "Sure, it's Sarah Williams, and the number is ending in 4471."
+
+  - speaker: agent
+    expected_behavior:
+      - Acknowledges verification
+      - Explains what a service/dispatch fee covers (from KB 03)
+      - Does NOT quote specific prices from memory
+      - Offers to transfer to billing for line-item details
+
+  - speaker: caller
+    text: "Okay, but I want to see the full invoice breakdown."
+
+  - speaker: agent
+    expected_behavior:
+      - Acknowledges this is beyond what agent can show
+      - Transfers to billing_phone OR creates service request if after hours
+      - Does NOT say "I can't help with that" without offering a path forward

@@ -1,0 +1,63 @@
+{
+  "_comment": "ElevenLabs ConvAI webhook tool schema for book_appointment. Ported from elevenlabs.js:bookAppointmentTool(). The runtime assembler (stamp.py) substitutes {{webhook_base_url}} and {{client_slug}} before uploading via POST /v1/convai/tools.",
+  "_source": "elevenlabs.js bookAppointmentTool() — migrated 2026-04-16",
+  "type": "webhook",
+  "name": "{{client_slug}}__book_appointment",
+  "description": "Book an appointment on the business calendar. Only call this AFTER confirming the slot is available (via check_availability) and the caller has provided their name, phone number, and reason for the visit. Read back the appointment details to the caller before calling this tool.",
+  "response_timeout_secs": 20,
+  "api_schema": {
+    "url": "{{webhook_base_url}}/webhook/elevenlabs/tool/{{client_slug}}/book_appointment",
+    "method": "POST",
+    "content_type": "application/json",
+    "request_headers": {
+      "X-Vox-Tool-Secret": "{{tool_secret}}"
+    },
+    "request_body_schema": {
+      "type": "object",
+      "required": ["slot_iso", "customer_name", "customer_phone", "reason"],
+      "properties": {
+        "slot_iso": {
+          "type": "string",
+          "description": "The exact ISO timestamp of the chosen slot, as returned by check_availability. Use the 'iso' field verbatim."
+        },
+        "customer_name": {
+          "type": "string",
+          "description": "The caller's full name. First name is required; last name is collected if offered."
+        },
+        "customer_phone": {
+          "type": "string",
+          "description": "The caller's callback phone number. Required — do not call this tool without it."
+        },
+        "customer_email": {
+          "type": "string",
+          "description": "The caller's email address. Optional — only include if volunteered by the caller."
+        },
+        "service_id": {
+          "type": "string",
+          "description": "Optional service ID from the business services list if the caller requested a specific service type."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Short summary of why the caller is coming in (e.g. 'drain clog', 'water heater inspection', 'leak under sink'). Required."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Any additional details the caller provided about the problem, access instructions, or preferences. Optional."
+        }
+      }
+    }
+  },
+  "_response_contract": {
+    "booked": "boolean — true if the appointment was successfully created",
+    "appointmentId": "string — GHL appointment ID (internal reference, do not read to caller)",
+    "confirmation": "string — human-readable confirmation safe to read to caller (e.g. 'Thursday, April 17 at 10:00 AM')",
+    "error": "string — present only if booked=false. Translate to plain English before speaking."
+  },
+  "_pre_call_checklist": [
+    "slot_iso obtained from check_availability this call",
+    "customer_name collected",
+    "customer_phone collected",
+    "reason for visit collected",
+    "details read back to caller and confirmed"
+  ]
+}

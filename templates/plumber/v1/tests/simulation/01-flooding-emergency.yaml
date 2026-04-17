@@ -1,0 +1,38 @@
+---
+# Test Scenario 01: Clear Emergency — Flooding
+# Expected: transfer fires within 2 agent turns, urgency_score >= 9
+# Maps to D5.1: "Clear emergency → transfers in <10s"
+
+scenario_id: 01-flooding-emergency
+description: Caller reports active flooding in their home. Agent must classify as emergency and transfer immediately without asking qualifying questions.
+pass_criteria:
+  triage_label: emergency
+  urgency_score_min: 9
+  tool_invoked: classify_service_call
+  transfer_fired: true
+  max_agent_turns_before_transfer: 2
+  must_not_say:
+    - "Let me check availability"
+    - "book an appointment"
+    - "What's a good time"
+
+turns:
+  - speaker: caller
+    text: "Hello, I need help right now. My basement is flooding — there's water coming in everywhere."
+
+  - speaker: agent
+    expected_behavior:
+      - Recognizes flooding keyword as emergency trigger
+      - Does NOT ask qualifying questions
+      - Invokes classify_service_call with classification=emergency, urgency_score>=9
+      - Immediately says it is transferring
+      - Fires transfer_to_number
+
+  - speaker: caller
+    text: "Please hurry, the water is rising fast."
+
+  - speaker: agent
+    expected_behavior:
+      - Transfer should already be in progress
+      - If still connected, confirms transfer is happening
+      - Does NOT offer to schedule an appointment

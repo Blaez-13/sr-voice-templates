@@ -1,0 +1,63 @@
+---
+# Test Scenario 09: Tool Failure — book_appointment Returns Error
+# Expected: agent acknowledges failure, does NOT claim success, offers callback
+# Maps to D5.9: "Tool failure → acknowledges, doesn't claim success"
+
+scenario_id: 09-tool-failure
+description: >
+  Caller goes through the full booking flow, but book_appointment returns an error.
+  Agent must honestly report the failure, retry once, then offer a callback without
+  claiming the appointment was booked.
+pass_criteria:
+  agent_does_not_confirm_false_booking: true
+  retry_attempted: true
+  callback_offered_after_retry_fails: true
+  service_request_created: true
+  must_not_say:
+    - "You're all set"   # cannot confirm booking on failure
+    - "You're booked"
+    - "Appointment confirmed"
+  must_say_one_of:
+    - "technical issue"
+    - "having trouble"
+    - "call you back"
+    - "confirm directly"
+
+tool_mock:
+  check_availability:
+    response:
+      available: true
+      date: "2026-04-17"
+      slots:
+        - { iso: "2026-04-17T10:00:00-05:00", display: "10:00 AM" }
+  book_appointment:
+    first_call_response:
+      booked: false
+      error: "Calendar service temporarily unavailable."
+    second_call_response:
+      booked: false
+      error: "Calendar service temporarily unavailable."
+
+turns:
+  - speaker: caller
+    text: "I'd like to book a water heater inspection for Thursday morning."
+
+  - speaker: agent
+    expected_behavior:
+      - Calls check_availability, finds 10 AM slot
+      - Collects name and phone
+      - Reads back details, caller confirms
+
+  - speaker: caller
+    text: "Yes, that's right — Mike Anderson, 205-555-0133."
+
+  - speaker: agent
+    expected_behavior:
+      - Attempts book_appointment (first call — fails)
+      - Does NOT say "you're booked"
+      - Says something like "I'm having a brief technical issue — let me try that again."
+      - Retries book_appointment (second call — fails again)
+      - Says it cannot complete the booking through the system right now
+      - Offers: "Someone will call you back at 205-555-0133 to confirm the appointment directly"
+      - Creates service request with all collected details
+      - Does NOT end the call without a clear commitment

@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Plumber v1 — Client Onboarding Intake Form",
+  "description": "Fields collected from the client during onboarding. stamp.py uses this file to render {{placeholder}} values in all prompt and KB templates before uploading to ElevenLabs.",
+  "type": "object",
+  "required": [
+    "client_slug",
+    "client_name",
+    "agent_name",
+    "voice_id",
+    "webhook_base_url",
+    "tool_secret",
+    "business_timezone",
+    "business_hours",
+    "emergency_phone",
+    "emergency_hours",
+    "main_phone",
+    "service_area_primary",
+    "service_area_zips",
+    "escalation_name",
+    "owner_name",
+    "owner_phone",
+    "urgent_callback_sla",
+    "complaint_callback_sla",
+    "general_callback_sla"
+  ],
+  "properties": {
+    "client_slug": {
+      "type": "string",
+      "description": "URL-safe identifier, e.g. 'bama-plumbing'. Used in webhook URLs and ElevenLabs tool names.",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Display name of the business, e.g. 'Bama Plumbing & Drain'."
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Name the AI agent uses for itself on calls, e.g. 'Alex'.",
+      "default": "Vox"
+    },
+    "voice_id": {
+      "type": "string",
+      "description": "ElevenLabs voice ID to use for this agent's TTS. Select from ElevenLabs voice library."
+    },
+    "webhook_base_url": {
+      "type": "string",
+      "description": "The public base URL of the SR voice-bot service, e.g. 'https://sr-voice-bot-925407339242.us-central1.run.app'.",
+      "format": "uri"
+    },
+    "tool_secret": {
+      "type": "string",
+      "description": "Shared secret for X-Vox-Tool-Secret header. Generate with: openssl rand -hex 32. Store in GCP Secret Manager."
+    },
+    "business_timezone": {
+      "type": "string",
+      "description": "IANA timezone identifier, e.g. 'America/Chicago'.",
+      "default": "America/Chicago"
+    },
+    "business_hours": {
+      "type": "string",
+      "description": "Human-readable business hours, e.g. 'Monday–Friday 7:00 AM–5:00 PM, Saturday 8:00 AM–12:00 PM, Sunday closed'."
+    },
+    "after_hours_policy": {
+      "type": "string",
+      "description": "What happens when a non-emergency caller calls after hours. Options: 'emergency_only' | 'answering_service' | '24_7_emergency'. Defaults to emergency_only.",
+      "enum": ["emergency_only", "answering_service", "24_7_emergency"],
+      "default": "emergency_only"
+    },
+    "holiday_hours": {
+      "type": "string",
+      "description": "Holiday hours statement, e.g. 'Closed Thanksgiving and Christmas Day'. Optional."
+    },
+    "emergency_phone": {
+      "type": "string",
+      "description": "On-call emergency phone number, e.g. '+12055550100'.",
+      "pattern": "^\\+1[0-9]{10}$"
+    },
+    "emergency_hours": {
+      "type": "string",
+      "description": "When emergency line is staffed, e.g. '24/7' or 'after-hours only'."
+    },
+    "emergency_after_hours_sla": {
+      "type": "string",
+      "description": "How long until someone calls back for after-hours emergencies, e.g. '30 minutes'.",
+      "default": "30 minutes"
+    },
+    "main_phone": {
+      "type": "string",
+      "description": "Main business phone number for general transfers."
+    },
+    "billing_phone": {
+      "type": "string",
+      "description": "Billing department phone. Optional — defaults to main_phone."
+    },
+    "billing_email": {
+      "type": "string",
+      "description": "Billing contact email. Optional.",
+      "format": "email"
+    },
+    "billing_hours": {
+      "type": "string",
+      "description": "When billing can be reached. Optional — defaults to business_hours."
+    },
+    "escalation_name": {
+      "type": "string",
+      "description": "Name to use when telling callers who will call them back, e.g. 'our team' or 'Jake'."
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Business owner's name for high-escalation transfers."
+    },
+    "owner_phone": {
+      "type": "string",
+      "description": "Owner's direct phone for escalation."
+    },
+    "service_area_primary": {
+      "type": "string",
+      "description": "Primary service area description, e.g. 'Birmingham, Alabama and surrounding communities'."
+    },
+    "service_area_extended": {
+      "type": "string",
+      "description": "Extended or call-to-confirm service area. Optional."
+    },
+    "service_area_zips": {
+      "type": "array",
+      "description": "List of ZIP codes served. Used to answer 'do you serve my area' questions.",
+      "items": { "type": "string", "pattern": "^[0-9]{5}$" }
+    },
+    "dispatch_fee_policy": {
+      "type": "string",
+      "description": "Dispatch/service call fee statement. e.g. 'There is a $95 service call fee...' or 'We offer free estimates'."
+    },
+    "payment_methods": {
+      "type": "string",
+      "description": "Accepted payment methods, e.g. 'Cash, check, and all major credit cards'."
+    },
+    "warranty_policy": {
+      "type": "string",
+      "description": "Labor and parts warranty statement."
+    },
+    "warranty_period": {
+      "type": "string",
+      "description": "How long labor is guaranteed, e.g. '90 days' or '1 year'."
+    },
+    "financing_policy": {
+      "type": "string",
+      "description": "Financing availability statement. Optional. Default: not offered."
+    },
+    "commercial_policy": {
+      "type": "string",
+      "description": "Whether commercial properties are served. e.g. 'Yes, we serve commercial properties' or 'Residential only'."
+    },
+    "license_number_disclosure": {
+      "type": "string",
+      "description": "License disclosure if the client wants it read on calls, e.g. 'License #AL-PLB-12345'. Optional."
+    },
+    "google_reviews_url": {
+      "type": "string",
+      "description": "Google Business Profile URL for reviews. Optional.",
+      "format": "uri"
+    },
+    "services_list": {
+      "type": "array",
+      "description": "List of services offered. Each item is a service object.",
+      "items": {
+        "type": "object",
+        "required": ["name", "service_id"],
+        "properties": {
+          "name": { "type": "string" },
+          "service_id": { "type": "string" },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "services_not_offered": {
+      "type": "string",
+      "description": "Plain-English list of services NOT offered, to handle caller questions. Optional."
+    },
+    "urgency_definitions": {
+      "type": "string",
+      "description": "Custom urgency definition for classify_service_call tool. Overrides default plumber criteria. Optional."
+    },
+    "spanish_contact": {
+      "type": "string",
+      "description": "Phone number for Spanish-speaking staff. If null, agent offers callback instead of transfer."
+    },
+    "urgent_callback_sla": {
+      "type": "string",
+      "description": "Callback commitment for urgent follow-ups, e.g. '2 hours' or 'same business day'.",
+      "default": "2 hours"
+    },
+    "complaint_callback_sla": {
+      "type": "string",
+      "description": "Callback commitment for complaints, e.g. 'next business day'.",
+      "default": "next business day"
+    },
+    "general_callback_sla": {
+      "type": "string",
+      "description": "Callback commitment for general inquiries.",
+      "default": "1 business day"
+    },
+    "first_message": {
+      "type": "string",
+      "description": "Greeting the agent says when the call connects. Must include 911 disclaimer. Example: 'Thank you for calling [client_name] — this is [agent_name]. For life-threatening emergencies, please call 911. How can I help you today?'"
+    },
+    "elevenlabs_knowledge_base_id": {
+      "type": "string",
+      "description": "Populated by stamp.py after KB upload. Do not fill manually."
+    }
+  }
+}

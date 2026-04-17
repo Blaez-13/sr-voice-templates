@@ -1,0 +1,43 @@
+---
+# Test Scenario 04: Caller Refuses to Describe Problem
+# Expected: agent asks 2 clarifying questions max, then transfers
+# Maps to D5.4: "Caller refuses problem description → transfers after 2 clarifiers"
+
+scenario_id: 04-refuses-to-describe
+description: Caller will not describe their plumbing problem but wants service. Agent makes two attempts to clarify, then offers human transfer.
+pass_criteria:
+  max_clarifying_questions: 2
+  transfer_offered: true
+  agent_does_not_give_up_without_path_forward: true
+  must_not_say:
+    - "I'm unable to help"
+    - "I cannot assist"
+    - "I don't understand"
+
+turns:
+  - speaker: caller
+    text: "I need a plumber. Just send someone out."
+
+  - speaker: agent
+    expected_behavior:
+      - Asks one clarifying question — what is the issue?
+      - Friendly, not demanding
+
+  - speaker: caller
+    text: "I don't want to explain it. Just send someone."
+
+  - speaker: agent
+    expected_behavior:
+      - Acknowledges the frustration
+      - Asks ONE more targeted question (e.g., "Is this an emergency or can it wait?")
+      - Does NOT lecture the caller about needing information
+
+  - speaker: caller
+    text: "Look, I just need someone here today. Can you do that or not?"
+
+  - speaker: agent
+    expected_behavior:
+      - Does NOT ask a third qualifying question
+      - Offers to transfer to a human who can arrange the visit directly
+      - OR proceeds to booking with reason = "unspecified plumbing issue" if they agree
+      - Gives the caller a clear choice: transfer or book

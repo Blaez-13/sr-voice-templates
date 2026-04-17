@@ -1,0 +1,99 @@
+---
+# Plumber v1 — Agent Workflow Definition
+# This file defines the conversational flow graph for a deployed plumber voice agent.
+# stamp.py reads this to determine which prompts and fragments to assemble.
+
+vertical: plumber
+version: v1
+llm_nodes:
+  triage:
+    model: gemini-2.0-flash-lite
+    temperature: 0.7
+    reasoning_effort: low
+    prompt_files:
+      - fragments/08-emergency-override.md   # FIRST — emergency override is highest priority
+      - fragments/00-datetime-anchor.md
+      - fragments/01-persona-warm-direct.md
+      - templates/plumber/v1/prompts/triage.md
+      - fragments/02-tool-discipline.md
+      - fragments/04-off-topic.md
+      - fragments/09-no-pricing-policy.md
+      - fragments/07-output-contract.md
+
+  emergency:
+    model: gemini-2.0-flash-lite
+    temperature: 0.7
+    reasoning_effort: low
+    prompt_files:
+      - fragments/08-emergency-override.md
+      - templates/plumber/v1/prompts/emergency.md
+      - fragments/07-output-contract.md
+
+  booking:
+    model: gemini-2.0-flash
+    temperature: 0.7
+    reasoning_effort: low
+    prompt_files:
+      - fragments/00-datetime-anchor.md
+      - fragments/01-persona-warm-direct.md
+      - templates/plumber/v1/prompts/booking.md
+      - fragments/02-tool-discipline.md
+      - fragments/06-pii-discipline.md
+      - fragments/03-silence-handling.md
+      - fragments/07-output-contract.md
+
+  support:
+    model: gemini-2.0-flash-lite
+    temperature: 0.7
+    reasoning_effort: low
+    prompt_files:
+      - fragments/01-persona-warm-direct.md
+      - templates/plumber/v1/prompts/support.md
+      - fragments/04-off-topic.md
+      - fragments/09-no-pricing-policy.md
+      - fragments/05-escalation.md
+      - fragments/07-output-contract.md
+
+  billing:
+    model: gemini-2.0-flash
+    temperature: 0.7
+    reasoning_effort: low
+    prompt_files:
+      - fragments/01-persona-warm-direct.md
+      - templates/plumber/v1/prompts/billing.md
+      - fragments/06-pii-discipline.md
+      - fragments/05-escalation.md
+      - fragments/07-output-contract.md
+
+tts:
+  model: eleven_flash_v2_5
+  voice_id: "{{voice_id}}"   # Set in intake-form.json at onboarding
+
+tools:
+  - check_availability     # tools/get_free_slots.json
+  - book_appointment       # tools/book_appointment.json
+  - classify_service_call  # defined in elevenlabs.js, not in this repo
+  - create_service_request # defined in elevenlabs.js, not in this repo
+  - transfer_to_number     # ElevenLabs built-in
+  - end_call               # ElevenLabs built-in
+
+knowledge_base_files:
+  - templates/plumber/v1/kb/01-service-area.md
+  - templates/plumber/v1/kb/02-hours-and-after-hours.md
+  - templates/plumber/v1/kb/03-pricing-policy.md
+  - templates/plumber/v1/kb/04-emergency-criteria.md
+  - templates/plumber/v1/kb/05-services-offered.md
+  - templates/plumber/v1/kb/06-common-faqs.md
+  - templates/plumber/v1/kb/07-escalation-contacts.md
+
+routing:
+  # After classify_service_call resolves, route to the appropriate node.
+  emergency:        { next_node: emergency, urgency_score_min: 8 }
+  new_booking:      { next_node: booking }
+  service_complaint:{ next_node: support }
+  urgent_followup:  { next_node: support, urgency_score_min: 6 }
+  billing:          { next_node: billing }
+
+test_suite:
+  path: templates/plumber/v1/tests/simulation/
+  pass_threshold: 9   # must pass ≥9 of 10 before client go-live

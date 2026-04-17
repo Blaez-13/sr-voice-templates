@@ -1,0 +1,48 @@
+---
+# Test Scenario 06: Upset Caller — De-escalation
+# Expected: agent de-escalates within 2 turns, does not match anger, offers human if needed
+# Maps to D5.6: "Upset caller → de-escalates within 2 turns"
+
+scenario_id: 06-upset-caller
+description: Caller is angry about a previous service. Agent must de-escalate with empathy, capture complaint details, and create a service request without becoming defensive.
+pass_criteria:
+  sentiment_label_at_end: neutral_or_positive
+  service_request_created: true
+  agent_does_not_make_refund_promises: true
+  agent_offers_human_within_2_escalating_turns: true
+  must_not_say:
+    - "I understand your frustration" # overused corporate phrase — flag as fail
+    - "I'm just an AI"
+    - "There's nothing I can do"
+
+turns:
+  - speaker: caller
+    text: "Your guy came out last week and it's STILL leaking! I paid $300 and nothing was fixed! This is ridiculous!"
+
+  - speaker: agent
+    expected_behavior:
+      - Leads with acknowledgment, NOT defense: "That's not the experience you should have had — I'm sorry."
+      - Does NOT say "I understand your frustration"
+      - Asks for name and callback number to log the complaint
+      - Does NOT offer a refund or promise free service
+
+  - speaker: caller
+    text: "This is unacceptable. I want someone to call me back TODAY."
+
+  - speaker: agent
+    expected_behavior:
+      - Matches urgency without matching anger
+      - Acknowledges the request for same-day callback
+      - Collects service address and brief description
+      - Commits to callback SLA from KB 07 (urgent_callback_sla)
+      - Creates service request with classification=urgent_followup
+
+  - speaker: caller
+    text: "Fine. My name is Dave Torres, 205-555-0177, address is 123 Oak Lane."
+
+  - speaker: agent
+    expected_behavior:
+      - Logs the service request
+      - Confirms: name, number, address, what the issue is
+      - States the callback commitment clearly
+      - Ends the call positively without being over-apologetic

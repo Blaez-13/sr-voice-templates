@@ -1,0 +1,39 @@
+---
+# Test Scenario 07: Mis-Framed Emergency
+# Expected: agent recognizes ambiguous description, asks ONE clarifying question, fires emergency branch
+# Maps to D5.7: "Mis-framed emergency ('toilet running, water on floor') → emergency branch fires"
+
+scenario_id: 07-misframed-emergency
+description: >
+  Caller describes "toilet running and water on the floor" — sounds routine but could be active flooding.
+  Agent asks exactly one clarifying question, determines it is active, and routes as emergency.
+pass_criteria:
+  max_clarifying_questions_before_classification: 1
+  triage_label: emergency
+  transfer_fired: true
+  must_not_say:
+    - "I can schedule"  # should not offer booking before confirming severity
+  agent_asks_one_of:
+    - "Is the water actively flowing"
+    - "Is it spreading"
+    - "How much water"
+
+turns:
+  - speaker: caller
+    text: "Hi, I've got a toilet that's been running all day and there's water on the floor in the bathroom."
+
+  - speaker: agent
+    expected_behavior:
+      - Does NOT immediately classify as routine booking
+      - Does NOT immediately classify as emergency without confirming
+      - Asks exactly ONE question about whether the water is actively flowing/spreading
+
+  - speaker: caller
+    text: "Yeah, the water is spreading across the whole floor, it's coming out from under the toilet."
+
+  - speaker: agent
+    expected_behavior:
+      - Immediately classifies as emergency on "spreading" confirmation
+      - Invokes classify_service_call with emergency classification
+      - Fires transfer_to_number
+      - Does NOT ask follow-up questions once spreading is confirmed

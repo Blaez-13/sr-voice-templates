@@ -1,0 +1,70 @@
+---
+# Test Scenario 02: Routine Booking — Drain Clog
+# Expected: successful booking with all required fields collected
+# Maps to D5.2: "Routine booking → books successfully"
+
+scenario_id: 02-clog-booking
+description: Caller wants to schedule a drain cleaning. Agent collects service type, availability, name, phone, confirms, and books.
+pass_criteria:
+  triage_label: new_booking
+  tool_invoked: check_availability
+  tool_invoked_2: book_appointment
+  booking_confirmed: true
+  required_fields_collected:
+    - customer_name
+    - customer_phone
+    - reason
+    - slot_iso
+  max_turns_to_booking: 8
+
+turns:
+  - speaker: caller
+    text: "Hi, I have a slow drain in my kitchen sink. I'd like to get someone out to take a look."
+
+  - speaker: agent
+    expected_behavior:
+      - Classifies as new_booking
+      - Asks for preferred date/time OR asks what's going on (to confirm non-emergency)
+
+  - speaker: caller
+    text: "Any time this week works, maybe Thursday or Friday?"
+
+  - speaker: agent
+    expected_behavior:
+      - Calls check_availability with date_range_start covering Thursday
+      - Reports available times clearly
+      - Offers 2-3 specific time options
+
+  - speaker: caller
+    text: "Thursday at 10 sounds good."
+
+  - speaker: agent
+    expected_behavior:
+      - Acknowledges the time selection
+      - Asks for caller's name
+
+  - speaker: caller
+    text: "It's Mike Johnson."
+
+  - speaker: agent
+    expected_behavior:
+      - Acknowledges name
+      - Asks for callback phone number
+
+  - speaker: caller
+    text: "Sure, it's 205-555-0190."
+
+  - speaker: agent
+    expected_behavior:
+      - Reads back all details (name, date, time, service, phone)
+      - Asks for explicit confirmation before booking
+
+  - speaker: caller
+    text: "Yes that's right."
+
+  - speaker: agent
+    expected_behavior:
+      - Calls book_appointment with all required fields
+      - Confirms appointment on success
+      - Mentions confirmation text will be sent
+      - Asks if anything else needed

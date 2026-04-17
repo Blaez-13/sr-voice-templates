@@ -1,0 +1,45 @@
+{
+  "_comment": "ElevenLabs ConvAI webhook tool schema for check_availability. Ported from elevenlabs.js:checkAvailabilityTool(). The runtime assembler (stamp.py) substitutes {{webhook_base_url}} and {{client_slug}} before uploading via POST /v1/convai/tools.",
+  "_source": "elevenlabs.js checkAvailabilityTool() — migrated 2026-04-16",
+  "type": "webhook",
+  "name": "{{client_slug}}__check_availability",
+  "description": "Check available appointment slots in the business calendar for a given date or date range. Call this when the caller wants to know when they can come in or asks about specific times. Always check availability before attempting to book.",
+  "response_timeout_secs": 15,
+  "api_schema": {
+    "url": "{{webhook_base_url}}/webhook/elevenlabs/tool/{{client_slug}}/check_availability",
+    "method": "POST",
+    "content_type": "application/json",
+    "request_headers": {
+      "X-Vox-Tool-Secret": "{{tool_secret}}"
+    },
+    "request_body_schema": {
+      "type": "object",
+      "required": ["date_range_start"],
+      "properties": {
+        "date_range_start": {
+          "type": "string",
+          "description": "Start of the window to check, in the business timezone. Use ISO date (YYYY-MM-DD) or a natural phrase like 'tomorrow' or 'next Tuesday'."
+        },
+        "date_range_end": {
+          "type": "string",
+          "description": "Optional end of the window. Defaults to 3 business days after start. Use ISO date or a natural phrase."
+        },
+        "specific_time": {
+          "type": "string",
+          "description": "Optional specific time of day the caller asked about, e.g. '10am' or '2:30pm'. When present, the tool will answer whether that time is open rather than listing all slots."
+        }
+      }
+    }
+  },
+  "_response_contract": {
+    "available": "boolean — true if any slots exist in the requested window",
+    "date": "string — resolved ISO date that was checked",
+    "slots": [
+      {
+        "iso": "string — full ISO timestamp of the slot (use this for book_appointment.slot_iso)",
+        "display": "string — human-readable time, e.g. '10:00 AM'"
+      }
+    ],
+    "message": "string — plain-English summary safe to read to caller if available=false"
+  }
+}

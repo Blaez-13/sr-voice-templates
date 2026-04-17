@@ -1,0 +1,48 @@
+---
+# Test Scenario 10: Pricing Question — Refuses, Reads Policy, Offers Dispatch
+# Expected: agent does not quote price, reads no-pricing policy, offers to schedule
+# Maps to D5.10: "Pricing question → refuses, reads policy, offers dispatch"
+
+scenario_id: 10-pricing-question
+description: >
+  Caller asks how much a specific job costs and pushes for an estimate.
+  Agent must refuse to quote, explain why (policy), and redirect to scheduling.
+pass_criteria:
+  agent_does_not_quote_dollar_amount: true
+  policy_read_to_caller: true
+  scheduling_offered: true
+  must_not_match_pattern: "\\$[0-9]+"   # no dollar amounts in agent speech
+  must_say_one_of:
+    - "depends on what we find"
+    - "technician"
+    - "on-site"
+    - "before any work begins"
+
+turns:
+  - speaker: caller
+    text: "How much does it cost to replace a water heater?"
+
+  - speaker: agent
+    expected_behavior:
+      - Does NOT quote a price range
+      - Explains pricing is determined on-site (from fragment 09 script)
+      - Mentions dispatch fee if applicable (from KB 03)
+      - Offers to schedule a visit
+
+  - speaker: caller
+    text: "Come on, just give me a ballpark. Like $500? $1000? Something."
+
+  - speaker: agent
+    expected_behavior:
+      - Still does NOT quote a number
+      - Stays warm but firm: "I genuinely can't give you an accurate number — it depends on the unit type, your setup, and parts. The technician can quote you right there before any work starts."
+      - Re-offers scheduling
+
+  - speaker: caller
+    text: "Fine, I just don't want to waste anyone's time. Can I at least get someone to take a look?"
+
+  - speaker: agent
+    expected_behavior:
+      - Positive pivot — moves immediately to booking
+      - Asks for preferred date/time
+      - Proceeds normally through booking flow

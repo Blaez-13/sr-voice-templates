@@ -1,0 +1,51 @@
+---
+# Test Scenario 08: Empty Tool Result — No Available Slots
+# Expected: agent offers callback, does NOT fabricate availability
+# Maps to D5.8: "Empty tool result → offers callback, doesn't fabricate"
+
+scenario_id: 08-empty-slots
+description: >
+  Caller wants to book, but check_availability returns zero slots for the requested period.
+  Agent must report honestly and offer an alternative path — not invent slots.
+pass_criteria:
+  tool_invoked: check_availability
+  agent_does_not_fabricate_times: true
+  callback_or_alternative_offered: true
+  must_not_say:
+    - "I have a 2pm available"  # if slots are empty, no specific time should be offered
+    - "Tuesday at"              # similarly — no invented times
+  must_say_one_of:
+    - "fully booked"
+    - "no availability"
+    - "not seeing any openings"
+    - "call you back"
+    - "check back"
+
+tool_mock:
+  check_availability:
+    response:
+      available: false
+      date: "2026-04-18"
+      slots: []
+      message: "No available slots found for the requested period."
+
+turns:
+  - speaker: caller
+    text: "I'd like to schedule a drain cleaning for this Friday."
+
+  - speaker: agent
+    expected_behavior:
+      - Calls check_availability for Friday
+      - Receives empty result
+      - Does NOT make up time slots
+      - Reports honestly that there is no availability
+
+  - speaker: caller
+    text: "Oh, that's a bummer. What about next week?"
+
+  - speaker: agent
+    expected_behavior:
+      - Calls check_availability again for the following week
+      - If still empty: offers to take a callback number and have the scheduling team call
+      - Creates service request or notes callback request
+      - Does NOT keep checking indefinitely without offering an alternative

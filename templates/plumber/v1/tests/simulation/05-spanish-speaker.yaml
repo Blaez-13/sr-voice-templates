@@ -1,0 +1,35 @@
+---
+# Test Scenario 05: Non-English Caller
+# Expected: agent acknowledges language barrier, routes to Spanish-speaking staff or callback
+# Maps to D5.5: "Non-English caller → handoff or Spanish routing"
+
+scenario_id: 05-spanish-speaker
+description: Caller speaks Spanish. Agent recognizes it cannot serve in Spanish and routes to a Spanish-speaking team member or callback.
+pass_criteria:
+  language_recognized: spanish
+  caller_not_left_without_path: true
+  transfer_or_callback_offered: true
+  agent_does_not_proceed_in_english_only_for_3_plus_turns: true
+  must_not_say:
+    - "I don't speak Spanish"  # too blunt — agent should acknowledge warmly
+
+turns:
+  - speaker: caller
+    text: "Hola, necesito un plomero. Tengo un problema con las tuberías."
+
+  - speaker: agent
+    expected_behavior: >
+      Recognizes Spanish. Responds with a brief, warm acknowledgment (can be bilingual):
+      something like "Hola — un momento, let me connect you with someone who can help in Spanish."
+      Does NOT attempt to conduct the full call in English.
+      Offers to transfer to Spanish-speaking staff member OR offer a callback.
+      {{spanish_contact}} is the configured Spanish-speaking contact (may be null — if null, offer callback).
+
+  - speaker: caller
+    text: "Sí, gracias."
+
+  - speaker: agent
+    expected_behavior:
+      - Confirms the path (transfer or callback)
+      - Gets callback number if doing callback
+      - Creates service request with notes = "Spanish-speaking caller, needs Spanish-language callback"
