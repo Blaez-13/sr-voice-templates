@@ -142,7 +142,32 @@ agents per node with Workflow routing) is a v2 concern flagged for Phase 4.
 ## Running smoke.py (Test Suite)
 
 `smoke.py` runs the 10 simulation scenarios in `tests/simulation/` against a deployed
-ElevenLabs agent and writes a JSON report. Exit code 0 = pass threshold met, 1 = fail.
+ElevenLabs agent and writes a JSON report.
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Gate operational and passed >= min_pass scenarios with real results. Safe to go live. |
+| `1` | Gate operational, ran real scenarios, but below pass threshold. Do NOT go live. |
+| `2` | Gate not operational. Either `API_INTEGRATION_COMPLETE = False` (endpoint not confirmed), or all scenarios are `status: pending` (no `pass_criteria` populated). This is fail-closed by design. |
+| `3` | Configuration error: missing agent ID, missing/bad YAML, missing API key, template not found. |
+
+Exit code 2 is distinct from exit 0 (pass) and exit 1 (fail). It signals that the gate
+itself cannot run real tests — not that the agent passed or failed. CI pipelines should
+treat exit 2 as a blocker that requires human action, not a passing build.
+
+### `gate_status` field in report JSON
+
+The report includes a `gate_status` field alongside the summary:
+
+| Value | When |
+|-------|------|
+| `"operational"` | API integrated and at least one scenario has `pass_criteria` |
+| `"pending_api"` | `API_INTEGRATION_COMPLETE = False` in `smoke.py` |
+| `"pending_scenarios"` | API complete but all scenario files have `pass_criteria: null` |
+
+### Usage
 
 ```bash
 # Run full suite against an agent (min 9/10 required to pass)
@@ -167,12 +192,38 @@ python deploy/smoke.py \
   --agent-id el_agent_abc123 \
   --template plumber/v1 \
   --report-dir /tmp/smoke-reports
+
+# Bypass fail-closed for dev work (all-pending suite exits 0 instead of 2)
+python deploy/smoke.py \
+  --agent-id el_agent_abc123 \
+  --template plumber/v1 \
+  --allow-pending
 ```
 
-The JSON report is written to `./reports/smoke-<timestamp>.json` and contains:
+**Never use `--allow-pending` in production CI.** It suppresses the fail-closed gate that
+prevents unvalidated agents from going live.
+
+### Fail-Closed Behavior
+
+smoke.py is fail-closed on two conditions:
+
+1. **`API_INTEGRATION_COMPLETE = False`** — The ElevenLabs simulation endpoint is not yet
+   confirmed. All scenarios run as stubs. Exit 2 (not 0) prevents new agents from passing
+   the gate on stub-only results.
+
+2. **All scenarios pending** — A new vertical template with no `pass_criteria` populated
+   yet. Without any real assertions, the gate has no evidence the agent works. Exit 2
+   forces someone to either populate scenarios or explicitly `--allow-pending` for dev.
+
+This design ensures that the only way to get exit 0 is to have both a working API integration
+AND at least `min_pass` scenarios with populated `pass_criteria` that actually pass.
+
+### The JSON Report
 
 ```json
 {
+  "generated_at": "2026-04-16T12:00:00+00:00",
+  "gate_status": "operational",
   "summary": { "passed": 9, "failed": 0, "skipped_api_pending": 1, "pending": 0, "total": 10 },
   "api_integration_complete": false,
   "tests": [
@@ -191,11 +242,10 @@ The JSON report is written to `./reports/smoke-<timestamp>.json` and contains:
 The ElevenLabs simulation endpoint (`POST /v1/convai/agents/{agent_id}/simulate`) is not yet
 confirmed as publicly available. `smoke.py` has the full assertion logic wired — when the
 endpoint is confirmed, set `API_INTEGRATION_COMPLETE = True` in `deploy/smoke.py` and verify
-the payload shape matches the TODO comment at line ~80.
+the payload shape matches the TODO comment at the top of the file.
 
-Until then, scenarios with `pass_criteria` defined are parsed and assertions are validated
-for structural correctness, but API calls are stubbed. Scenarios are marked
-`skipped_api_pending` rather than pass/fail, and the runner exits 0 to avoid blocking CI.
+Until then, scenarios run as stubs and the runner exits 2 (gate not operational) by default.
+Use `--allow-pending` to suppress exit 2 during local development.
 
 ## Admin UI Test Trigger
 

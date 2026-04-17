@@ -15,8 +15,8 @@ Each scenario YAML defines:
   - Optional tool_mock overrides (to simulate empty slots, tool failures, etc.)
 
 smoke.py submits each scenario to the ElevenLabs test API and evaluates the
-response against the pass_criteria. It writes a JSON report and exits 0 if
-the pass threshold is met, 1 otherwise.
+response against the pass_criteria. It writes a JSON report and exits with one
+of the codes below.
 
 USAGE
 -----
@@ -27,10 +27,30 @@ USAGE
     [--scenario 01-flooding-emergency] # Run a single scenario by ID
     [--report-dir ./reports]           # Where to write the JSON report (default: ./reports)
     [--api-key <key>]                  # Falls back to ELEVENLABS_API_KEY env var
+    [--allow-pending]                  # Allow all-pending suites to exit 0 (dev only)
 
 ENVIRONMENT VARIABLES
 ---------------------
   ELEVENLABS_API_KEY — Required. Your ElevenLabs API key.
+
+EXIT CODES
+----------
+  0 — Gate operational AND passed >= min_pass scenarios with real results.
+      At least one scenario must be "ready" (has pass_criteria) and must pass.
+  1 — Gate operational, ran real scenarios, but below pass threshold.
+      Agent should NOT go live.
+  2 — Gate not operational. Either:
+        a) API_INTEGRATION_COMPLETE = False (API endpoint not yet confirmed), OR
+        b) ALL scenarios are status "pending" (no pass_criteria populated).
+      This is distinct from a pass (0) or a real failure (1).
+      Use --allow-pending to suppress exit 2 for dev work (exits 0 instead).
+  3 — Configuration error: missing agent ID, missing scenarios, bad YAML,
+      missing API key, template not found, etc.
+
+gate_status field in report JSON:
+  "operational"        — API integrated and at least one ready scenario exists
+  "pending_api"        — API_INTEGRATION_COMPLETE = False
+  "pending_scenarios"  — API complete but all scenarios are pending/unready
 
 ElevenLabs Test API Notes
 -------------------------
@@ -49,14 +69,7 @@ TODO: Verify the exact simulation endpoint once EL publishes it.
 When the API endpoint is not confirmed, each scenario runs in STUB mode:
   - The scenario is parsed and assertions are validated for structural correctness
   - The result is marked "skipped_api_pending" (not pass, not fail)
-  - The runner exits 0 if (passed + skipped) >= min_pass so CI is not blocked
-
-EXIT CODES
-----------
-  0 — Passed >= min_pass scenarios (or met threshold counting skipped as neutral)
-  1 — Ran but below threshold — agent should NOT go live
-  2 — API error: could not reach ElevenLabs
-  3 — Configuration error: missing agent ID, missing scenarios, bad YAML, etc.
+  - The runner exits 2 (gate not operational) unless --allow-pending is passed
 """
 
 import argparse
@@ -351,12 +364,17 @@ def evaluate_pass_criteria(scenario: dict, api_response: dict) -> tuple:
 # ---------------------------------------------------------------------------
 # Report writer
 # ---------------------------------------------------------------------------
-def write_report(results: list, report_dir: Path) -> str:
+def write_report(results: list, report_dir: Path, gate_status: str) -> str:
     """
     Write a JSON test report to report_dir.
 
     Filename format: smoke-<YYYY-MM-DDTHH-MM-SS>.json
     Returns the absolute path to the written file.
+
+    The report includes a `gate_status` field:
+      "operational"       — API integrated and at least one ready scenario exists
+      "pending_api"       — API_INTEGRATION_COMPLETE = False
+      "pending_scenarios" — API complete but all scenarios are pending/unready
     """
     report_dir.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
@@ -370,6 +388,7 @@ def write_report(results: list, report_dir: Path) -> str:
 
     report = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "gate_status": gate_status,
         "summary": {
             "passed": passed,
             "failed": failed,
@@ -469,6 +488,16 @@ def main():
         "--api-key",
         help="ElevenLabs API key (falls back to ELEVENLABS_API_KEY env var)"
     )
+    parser.add_argument(
+        "--allow-pending",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow all-pending suites to exit 0 instead of 2. "
+            "Use during development when scenarios are not yet populated or "
+            "API_INTEGRATION_COMPLETE is False. Never set this in production CI."
+        )
+    )
     args = parser.parse_args()
 
     # Resolve API key
@@ -496,6 +525,16 @@ def main():
     if not API_INTEGRATION_COMPLETE:
         print("[smoke.py] WARNING:  API integration incomplete — verify endpoint at https://elevenlabs.io/docs/conversational-ai")
     print()
+
+    # ── Gate status: determine before running ────────────────────────────────
+    # "operational" requires both: API complete AND at least one ready scenario.
+    ready_count = sum(1 for s in scenarios if s.get("_status") == "ready")
+    if not API_INTEGRATION_COMPLETE:
+        gate_status = "pending_api"
+    elif ready_count == 0:
+        gate_status = "pending_scenarios"
+    else:
+        gate_status = "operational"
 
     # Run each scenario
     results = []
@@ -528,24 +567,43 @@ def main():
     print()
     print(f"[smoke.py] Results: {passed_count} passed, {failed_count} failed, {pending_count} skipped, {error_count} errors / {len(results)} total")
     print(f"[smoke.py] Threshold: {args.min_pass}/{len(scenarios)} required")
+    print(f"[smoke.py] Gate:    {gate_status}")
 
-    # Write report
-    report_path = write_report(results, Path(args.report_dir))
+    # Write report (includes gate_status field)
+    report_path = write_report(results, Path(args.report_dir), gate_status)
     print(f"[smoke.py] Report:  {report_path}")
 
-    # Determine exit code
-    # Pending/skipped scenarios count as neutral (not pass, not fail) so CI isn't
-    # blocked while the API integration is being confirmed.
-    effective_pass = passed_count
-    if effective_pass >= args.min_pass:
-        print(f"[smoke.py] RESULT:  PASS ({effective_pass}/{args.min_pass} threshold met)")
+    # ── Determine exit code ──────────────────────────────────────────────────
+    #
+    # Exit 2: gate not operational.
+    #   - API_INTEGRATION_COMPLETE = False (gate_status = "pending_api"), OR
+    #   - All scenarios are pending (gate_status = "pending_scenarios").
+    #   This is fail-closed: new agents with unpopulated scenarios cannot pass.
+    #   --allow-pending overrides to exit 0 for dev work.
+    #
+    # Exit 0: gate operational AND passed >= min_pass real scenarios.
+    #   Requires at least one scenario to be "ready" and actually pass.
+    #
+    # Exit 1: gate operational but below threshold.
+    #   Agent ran real scenarios and failed — do NOT go live.
+    #
+    if gate_status != "operational":
+        if args.allow_pending:
+            print(f"[smoke.py] RESULT:  SKIP (gate_status={gate_status}, --allow-pending set — exiting 0 for dev)")
+            sys.exit(0)
+        else:
+            print(
+                f"[smoke.py] RESULT:  GATE NOT OPERATIONAL (gate_status={gate_status}) — exit 2\n"
+                f"           Use --allow-pending to bypass for development."
+            )
+            sys.exit(2)
+
+    # Gate is operational — evaluate real pass count
+    if passed_count >= args.min_pass:
+        print(f"[smoke.py] RESULT:  PASS ({passed_count}/{args.min_pass} threshold met)")
         sys.exit(0)
     else:
-        # If all scenarios are pending/skipped and none have failed, treat as warning not block.
-        if failed_count == 0 and error_count == 0 and pending_count > 0:
-            print(f"[smoke.py] RESULT:  WARN (0 failures, but {pending_count} scenarios pending — not counting as pass)")
-            sys.exit(0)  # Don't block CI for pending-only suites
-        print(f"[smoke.py] RESULT:  FAIL ({effective_pass} passed, need {args.min_pass}) — do not go live")
+        print(f"[smoke.py] RESULT:  FAIL ({passed_count} passed, need {args.min_pass}) — do not go live")
         sys.exit(1)
 
 
