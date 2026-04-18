@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "sr-demo v1 — Self-Selling Demo Agent (Samantha)",
+  "description": "Intake for SR's own self-selling sales agent. The caller-facing business this agent represents IS Stellaris Ridge (or whichever agency deploys it). Activation-call bookings in Phase 7 go to the agency's own calendar.",
+  "type": "object",
+  "required": [
+    "client_slug",
+    "client_name",
+    "agent_name",
+    "voice_id",
+    "webhook_base_url",
+    "tool_secret",
+    "business_timezone",
+    "activation_team",
+    "price_monthly",
+    "trial_days",
+    "first_message"
+  ],
+  "properties": {
+    "client_slug": {
+      "type": "string",
+      "description": "URL-safe identifier for this demo deployment, e.g. 'sr-demo'.",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Display name of the agency that owns this demo agent, e.g. 'Stellaris Ridge'. Used when referring to the agency in Phase 7.",
+      "default": "Stellaris Ridge"
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Name the demo agent uses on calls.",
+      "default": "Samantha"
+    },
+    "voice_id": {
+      "type": "string",
+      "description": "ElevenLabs voice ID for the demo agent. Pick a warm, professional female voice."
+    },
+    "webhook_base_url": {
+      "type": "string",
+      "description": "Public base URL of the SR voice-bot service.",
+      "format": "uri"
+    },
+    "tool_secret": {
+      "type": "string",
+      "description": "Shared secret for X-Tool-Secret header. Usually pulled from ELEVENLABS_TOOL_SECRET env var at provision time."
+    },
+    "business_timezone": {
+      "type": "string",
+      "description": "IANA timezone for Phase 7 booking display.",
+      "default": "America/Chicago"
+    },
+    "activation_team": {
+      "type": "string",
+      "description": "Who the caller will meet on the activation call. E.g. 'Carl or Jarod' for SR.",
+      "default": "Carl or Jarod"
+    },
+    "price_monthly": {
+      "type": "string",
+      "description": "Monthly price of the product being pitched (used in Phase 6 breakeven math).",
+      "default": "497"
+    },
+    "trial_days": {
+      "type": "string",
+      "description": "Free trial length offered in Phase 6.",
+      "default": "30"
+    },
+    "first_message": {
+      "type": "string",
+      "description": "Opening line the agent says on answer. Should introduce Samantha as a demo assistant and offer a demo.",
+      "default": "Hey there! My name is Samantha AI, and I'm a demo voice assistant. If you'd like, I can show you what your callers can experience instead of going to voicemail. Would that work for you?"
+    },
+    "elevenlabs_knowledge_base_id": {
+      "type": "string",
+      "description": "Populated by stamp.py after KB upload. Do not fill manually."
+    }
+  }
+}

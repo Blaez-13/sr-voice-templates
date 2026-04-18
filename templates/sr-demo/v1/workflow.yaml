@@ -1,0 +1,45 @@
+---
+# sr-demo v1 — Self-Selling Demo Agent (Samantha)
+#
+# This is NOT a client receptionist. It's SR's own sales/demo agent that
+# qualifies prospects, role-plays a receptionist demo for their business,
+# pitches the AI receptionist at $497/mo with a 30-day free trial, and
+# books activation calls into SR's calendar.
+#
+# Architecture: single-agent, 8-phase conversational flow driven entirely
+# by prompt. Phase 7 is the only phase that uses check_availability and
+# book_appointment — bookings go onto SR's Firestore-configured GHL
+# calendar, not a prospect calendar.
+
+vertical: sr-demo
+version: v1
+
+llm_nodes:
+  main:
+    model: gemini-2.5-flash
+    temperature: 0.6
+    prompt_files:
+      - templates/sr-demo/v1/prompts/samantha.md
+
+tts:
+  model: eleven_flash_v2_5
+  voice_id: "{{voice_id}}"
+
+# Same tool loadout as _base/v1 — calendar, take_message, transfer, end_call.
+# Simulated bookings in Phase 4 are NOT tool calls (prompt-level discipline);
+# real activation bookings in Phase 7 use check_availability + book_appointment.
+tools:
+  - check_availability
+  - book_appointment
+  - take_message
+  - transfer_to_number
+  - end_call
+
+# KB files can be added later to provide NEPQ objection-handling scripts.
+# The prompt references a knowledgebase but the agent will improvise if
+# it's empty — not a blocker for launch.
+knowledge_base_files: []
+
+test_suite:
+  path: templates/sr-demo/v1/tests/simulation/
+  pass_threshold: 6
