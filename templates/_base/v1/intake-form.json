@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "_base v1 — Client Onboarding Intake (minimal)",
+  "description": "The minimum set of fields needed to stand up a single-agent voice receptionist. Vertical templates (plumber/hvac/dental) extend this schema with industry-specific fields. stamp.py renders {{placeholder}} markers in prompts and KB files using these values.",
+  "type": "object",
+  "required": [
+    "client_slug",
+    "client_name",
+    "agent_name",
+    "voice_id",
+    "webhook_base_url",
+    "tool_secret",
+    "business_timezone",
+    "business_hours",
+    "main_phone",
+    "escalation_phone",
+    "owner_name",
+    "owner_email",
+    "owner_phone",
+    "services_summary",
+    "first_message"
+  ],
+  "properties": {
+    "client_slug": {
+      "type": "string",
+      "description": "URL-safe identifier (lowercase, hyphens), e.g. 'bama-plumbing'. Used in webhook URLs and ElevenLabs tool names.",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "client_name": {
+      "type": "string",
+      "description": "Display name of the business, e.g. 'Bama Plumbing & Drain'."
+    },
+    "agent_name": {
+      "type": "string",
+      "description": "Name the AI agent uses on calls. Keep it short and natural.",
+      "default": "Ridge"
+    },
+    "voice_id": {
+      "type": "string",
+      "description": "ElevenLabs voice ID. Select from voice library, preview in admin UI."
+    },
+    "webhook_base_url": {
+      "type": "string",
+      "description": "Public base URL of the SR voice-bot service, e.g. 'https://sr-voice-bot-925407339242.us-central1.run.app'.",
+      "format": "uri"
+    },
+    "tool_secret": {
+      "type": "string",
+      "description": "Shared secret for X-Tool-Secret header. Generate with: openssl rand -hex 32. Usually pulled from ELEVENLABS_TOOL_SECRET env var at provision time."
+    },
+    "business_timezone": {
+      "type": "string",
+      "description": "IANA timezone, e.g. 'America/Chicago'.",
+      "default": "America/Chicago"
+    },
+    "business_hours": {
+      "type": "string",
+      "description": "Human-readable business hours, e.g. 'Monday–Friday 9:00 AM–5:00 PM, Saturday & Sunday closed'."
+    },
+    "holiday_hours": {
+      "type": "string",
+      "description": "Optional — holiday closures, e.g. 'Closed Thanksgiving and Christmas Day'."
+    },
+    "main_phone": {
+      "type": "string",
+      "description": "Main business phone in E.164 format, e.g. '+12055551234'. Used for general transfers.",
+      "pattern": "^\\+1[0-9]{10}$"
+    },
+    "escalation_phone": {
+      "type": "string",
+      "description": "The number the agent transfers to when qualification succeeds. Usually the owner or dedicated receptionist line.",
+      "pattern": "^\\+1[0-9]{10}$"
+    },
+    "owner_name": {
+      "type": "string",
+      "description": "Business owner's first name, used when taking messages ('I'll have John call you back')."
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Owner's email for callback notifications via Postmark.",
+      "format": "email"
+    },
+    "owner_phone": {
+      "type": "string",
+      "description": "Owner's SMS number for callback notifications via Twilio. E.164 format.",
+      "pattern": "^\\+1[0-9]{10}$"
+    },
+    "services_summary": {
+      "type": "string",
+      "description": "1–3 sentence summary of what the business offers. Gets rendered into the main prompt and the services KB file."
+    },
+    "service_area": {
+      "type": "string",
+      "description": "Plain-English service area description, e.g. 'Birmingham, Alabama and surrounding communities'."
+    },
+    "first_message": {
+      "type": "string",
+      "description": "Greeting the agent says when the call connects. Example: 'Hi, thanks for calling {{client_name}}! This is {{agent_name}}. How can I help?'. Must not reference 911 unless the business is in a life-safety vertical (plumbing-emergency, medical)."
+    },
+    "website_url": {
+      "type": "string",
+      "description": "Optional — business website URL.",
+      "format": "uri"
+    },
+    "integrations": {
+      "type": "object",
+      "description": "Optional — per-client overrides for integration config.",
+      "properties": {
+        "ghl": {
+          "type": "object",
+          "properties": {
+            "location_id": { "type": "string" },
+            "calendar_id": { "type": "string" },
+            "api_key_secret": { "type": "string", "description": "GSM secret path, e.g. 'projects/internal-sr/secrets/ghl-api-key-<slug>/versions/latest'." }
+          }
+        }
+      }
+    },
+    "elevenlabs_knowledge_base_id": {
+      "type": "string",
+      "description": "Populated by stamp.py after KB upload. Do not fill manually."
+    }
+  }
+}

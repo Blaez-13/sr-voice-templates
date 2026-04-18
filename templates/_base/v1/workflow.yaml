@@ -1,0 +1,61 @@
+---
+# _base v1 — Single-Agent Workflow (vertical-agnostic starting point)
+#
+# This is the generic starting template that every SR client begins from.
+# Vertical templates (plumber, hvac, dental, etc.) extend this by adding
+# vertical-specific KB files, intake fields, and prompt overrides.
+#
+# Architecture: SINGLE AGENT per client.
+#   - One LLM node ("main") receives the full system prompt.
+#   - Routing happens within the prompt via qualification + context.
+#   - Human handoff uses the EL built-in `transfer_to_number` tool with
+#     rule-based qualification (see prompts/agent.md).
+#   - Callback capture uses the `take_message` tool (see integrations/).
+#
+# stamp.py reads this file to know which fragments + prompts to assemble
+# and which KB files to upload.
+
+vertical: _base
+version: v1
+
+llm_nodes:
+  main:
+    model: gemini-2.5-flash
+    temperature: 0.7
+    prompt_files:
+      # Order matters — later fragments override or extend earlier ones.
+      - fragments/00-datetime-anchor.md
+      - fragments/01-persona-warm-direct.md
+      - templates/_base/v1/prompts/agent.md
+      - fragments/02-tool-discipline.md
+      - fragments/06-pii-discipline.md
+      - fragments/03-silence-handling.md
+      - fragments/04-off-topic.md
+      - fragments/10-escalation-qualify-first.md
+      - fragments/07-output-contract.md
+
+tts:
+  model: eleven_flash_v2_5
+  voice_id: "{{voice_id}}"
+
+# Tools attached at provision time via lib/elevenlabs-tools.js.
+# The Express provisioning flow baked the X-Tool-Secret header
+# into each tool URL so EL can call them without extra config.
+tools:
+  - check_availability     # lib/elevenlabs-tools.js → /webhook/.../{slug}/check_availability
+  - book_appointment       # lib/elevenlabs-tools.js → /webhook/.../{slug}/book_appointment
+  - take_message           # lib/elevenlabs-tools.js → /webhook/.../{slug}/take_message
+  - transfer_to_number     # ElevenLabs built-in
+  - end_call               # ElevenLabs built-in
+
+knowledge_base_files:
+  - templates/_base/v1/kb/01-about-business.md
+  - templates/_base/v1/kb/02-hours-and-contact.md
+  - templates/_base/v1/kb/03-services-and-pricing.md
+  - templates/_base/v1/kb/04-faq.md
+
+test_suite:
+  path: templates/_base/v1/tests/simulation/
+  # Lower bar than verticals: _base just validates the common flow
+  # (book, answer, take message, transfer). Vertical suites test edge cases.
+  pass_threshold: 7
